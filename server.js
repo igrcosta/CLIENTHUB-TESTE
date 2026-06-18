@@ -23,7 +23,7 @@ const { fetchMetaData } = require('./scripts/meta-lib');
 const { fetchGoogleAds } = require('./scripts/google-lib');
 const { fetchExpad } = require('./scripts/expad-lib');
 const ga4 = require('./scripts/ga4-lib');
-const { fetchTiktokData, exchangeAuthCode } = require('./scripts/tiktok-lib');
+const { fetchTiktokData, exchangeAuthCode, getAuthorizedAdvertisers } = require('./scripts/tiktok-lib');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, 'public');
@@ -596,6 +596,28 @@ const server = http.createServer((req, res) => {
         scope: d.scope || []
       }))
       .catch(e => json(res, 502, { error: 'falha ao trocar auth_code', detail: e.message }));
+  }
+
+  // ---- TikTok: diagnóstico do token (apenas equipe) ----
+  // Valida o TIKTOK_ACCESS_TOKEN e lista os anunciantes que ele enxerga.
+  // Se der 40105 aqui, o token está errado/revogado. Se listar os anunciantes,
+  // confira se o tiktokAdvertiserId do cliente está nessa lista.
+  if (p === '/api/tiktok-check') {
+    if (!isStaff(sess)) return json(res, 403, { error: 'apenas equipe (admin/analista)' });
+    if (!TIKTOK_TOKEN) return json(res, 503, { error: 'TIKTOK_ACCESS_TOKEN não configurado' });
+    if (!TIKTOK_APP_ID || !TIKTOK_APP_SECRET) return json(res, 503, { error: 'defina TIKTOK_APP_ID e TIKTOK_APP_SECRET no servidor' });
+    return getAuthorizedAdvertisers(TIKTOK_APP_ID, TIKTOK_APP_SECRET, TIKTOK_TOKEN)
+      .then(list => {
+        const autorizados = list.map(a => ({ advertiser_id: a.advertiser_id, nome: a.advertiser_name }));
+        const idsAutorizados = autorizados.map(a => String(a.advertiser_id));
+        // confere quais clientes do clients.json têm o advertiser_id coberto pelo token
+        const clientesTiktok = Object.entries(CLIENTS)
+          .filter(([, c]) => c.tiktokAdvertiserId)
+          .map(([id, c]) => ({ cliente: id, nome: c.nome, advertiser_id: String(c.tiktokAdvertiserId),
+            coberto_pelo_token: idsAutorizados.includes(String(c.tiktokAdvertiserId)) }));
+        json(res, 200, { ok: true, token_valido: true, tokenInicio: String(TIKTOK_TOKEN).slice(0, 6) + '…', tokenTamanho: String(TIKTOK_TOKEN).length, anunciantes_autorizados: autorizados, clientes_configurados: clientesTiktok });
+      })
+      .catch(e => json(res, 502, { ok: false, token_valido: false, error: 'token recusado pelo TikTok', detail: e.message, tokenInicio: String(TIKTOK_TOKEN).slice(0, 6) + '…', tokenTamanho: String(TIKTOK_TOKEN).length }));
   }
 
   // ---- Expad (vendas/CRM, por cliente) ----

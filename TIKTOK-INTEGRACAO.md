@@ -36,7 +36,7 @@ Dentro do bloco do cliente, adicione o `tiktokAdvertiserId`:
 ```json
 "cotemig-colegio": {
   ...
-  "tiktokAdvertiserId": "7039121894964084738",
+  "tiktokAdvertiserId": "1234567890123456789",
   ...
 }
 ```

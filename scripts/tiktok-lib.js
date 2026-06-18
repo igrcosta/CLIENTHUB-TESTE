@@ -55,6 +55,16 @@ async function exchangeAuthCode(appId, secret, authCode) {
   return data;
 }
 
+// ---------- Valida o token e lista os anunciantes que ele enxerga ----------
+// Usa /oauth2/advertiser/get/ — se o token estiver errado/revogado, o TikTok devolve code 40105 aqui também.
+async function getAuthorizedAdvertisers(appId, secret, token) {
+  if (!token) throw new Error('TIKTOK_ACCESS_TOKEN ausente');
+  const path = `${BASE}/oauth2/advertiser/get/?` + qs({ app_id: String(appId), secret: String(secret) });
+  const data = await get(path, { 'Access-Token': token });
+  // data: { list: [{ advertiser_id, advertiser_name }] }
+  return Array.isArray(data.list) ? data.list : [];
+}
+
 // ---------- Relatório integrado (BASIC) ----------
 const METRICS_DIA = ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'conversion', 'cost_per_conversion', 'reach'];
 const METRICS_CAMP = ['campaign_name', 'spend', 'impressions', 'clicks', 'conversion'];
@@ -143,4 +153,4 @@ async function fetchTiktokData(token, advertiserId, range) {
   };
 }
 
-module.exports = { fetchTiktokData, exchangeAuthCode };
+module.exports = { fetchTiktokData, exchangeAuthCode, getAuthorizedAdvertisers };
