@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: clienthub
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Senha da agência (vê todos os clientes) — defina no painel do Render.
+      - key: AGENCY_PASS
+        sync: false
+      # Segredo p/ assinar o cookie de sessão — o Render gera um valor seguro.
+      - key: SESSION_SECRET
+        generateValue: true
+      # Token do Meta Ads — você preenche o valor no painel do Render (fica secreto).
+      - key: META_TOKEN
+        sync: false
+      # Google Ads API (1 conjunto cobre TODAS as contas via MCC) — preencha no painel.
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_LOGIN_CUSTOMER_ID
+        sync: false
+      # Opcionais (já têm padrão no código; descomente só se mudar):
+      # - key: META_ACCOUNT
+      #   value: act_1658989684627909
+      # - key: META_CACHE_MIN
+      #   value: "180"
