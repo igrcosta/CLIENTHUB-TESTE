@@ -23,6 +23,7 @@ const { fetchMetaData } = require('./scripts/meta-lib');
 const { fetchGoogleAds } = require('./scripts/google-lib');
 const { fetchExpad } = require('./scripts/expad-lib');
 const ga4 = require('./scripts/ga4-lib');
+const { fetchTiktokData, exchangeAuthCode } = require('./scripts/tiktok-lib');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = path.join(__dirname, 'public');
@@ -31,6 +32,11 @@ const SECRET = process.env.SESSION_SECRET || 'dev-secret-troque-em-producao';
 const META_TOKEN = process.env.META_TOKEN || '';
 const META_PRESET = process.env.META_PRESET || 'last_30d';
 const META_TTL_MS = (parseInt(process.env.META_CACHE_MIN || '180', 10)) * 60 * 1000;
+// ---- TikTok Ads (token único do app cobre os anunciantes autorizados) ----
+const TIKTOK_TOKEN = process.env.TIKTOK_ACCESS_TOKEN || '';
+const TIKTOK_APP_ID = process.env.TIKTOK_APP_ID || '';
+const TIKTOK_APP_SECRET = process.env.TIKTOK_APP_SECRET || '';
+const TIKTOK_TTL_MS = (parseInt(process.env.TIKTOK_CACHE_MIN || '180', 10)) * 60 * 1000;
 
 const CLIENTS = JSON.parse(fs.readFileSync(path.join(__dirname, 'clients.json'), 'utf8'));
 // Usuários internos (cargos admin/analista). Senha pode vir de env USER_PASS_<USUARIO>.
@@ -145,7 +151,25 @@ function getGoogle(cli, cid, days) {
   return slot.inflight;
 }
 
-// ---------- GA4 (Analytics, por cliente — casa propriedade pelo nome ou ga4Property fixo) ----------
+// ---------- TikTok Ads (cache por cliente) ----------
+const tiktokCache = {}; // chave -> {data, ts, inflight}
+function getTiktok(cli, advId, days) {
+  const d = days ? Math.max(1, Math.min(400, days)) : historyDays();
+  const range = rangeFromDays(d);
+  const key = cli + '|' + (advId || '') + '|' + d;
+  const slot = tiktokCache[key] || (tiktokCache[key] = { data: null, ts: 0, inflight: null });
+  const now = Date.now();
+  if (slot.data && (now - slot.ts) < TIKTOK_TTL_MS) return Promise.resolve(slot.data);
+  if (slot.inflight) return slot.inflight;
+  slot.inflight = (async () => {
+    try {
+      const data = await fetchTiktokData(TIKTOK_TOKEN, advId, range);
+      slot.data = data; slot.ts = Date.now(); slot.inflight = null;
+      return data;
+    } catch (e) { slot.inflight = null; throw e; }
+  })();
+  return slot.inflight;
+}
 const GA4_TTL_MS = (parseInt(process.env.GA4_CACHE_MIN || '60', 10)) * 60 * 1000;
 const ga4Cache = {}; // cli|pid|from|to -> {data, ts, inflight}
 let ga4Props = { list: null, ts: 0, inflight: null };
@@ -367,6 +391,7 @@ function clientPublic(c, id) { // config exposta ao front (SEM senha)
   return { id, nome: c.nome, sub: c.sub, logo: c.logo, metas: c.metas, googleCustomerId: c.googleCustomerId,
     hasMeta: !!c.metaAccount || emps.some(e => e.metaAccount),
     metaSemAcesso: !!c.metaSemAcesso,   // cliente roda Meta mas a agência não tem acesso à conta
+    hasTiktok: !!c.tiktokAdvertiserId,   // mostra a aba TikTok só p/ quem tem advertiser_id no clients.json
     empreendimentos: emps.length ? emps.map(e => ({ id: e.id, nome: e.nome, metas: e.metas || null, hasMeta: !!e.metaAccount })) : null };
 }
 
@@ -532,6 +557,45 @@ const server = http.createServer((req, res) => {
     if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN) return json(res, 503, { error: 'Google Ads não configurado (faltam as chaves no servidor)' });
     const days = parseInt(u.searchParams.get('days') || '', 10) || 0;
     return getGoogle(cli, cid, days).then(d => json(res, 200, d)).catch(e => json(res, 502, { error: 'falha Google Ads', detail: e.message }));
+  }
+
+  // ---- TikTok Ads ao vivo (por cliente; advertiser_id no clients.json) ----
+  if (p === '/api/tiktok') {
+    const cli = u.searchParams.get('cli');
+    if (!canSee(sess, cli)) return json(res, 403, { error: 'sem acesso' });
+    const c = CLIENTS[cli];
+    if (!c) return json(res, 404, { error: 'cliente não encontrado' });
+    if (!TIKTOK_TOKEN) return json(res, 503, { error: 'TikTok não configurado (defina TIKTOK_ACCESS_TOKEN no servidor)' });
+    // resolve o anunciante: por empreendimento (emp) ou tiktokAdvertiserId direto
+    let advId = c.tiktokAdvertiserId || '';
+    if (Array.isArray(c.empreendimentos) && c.empreendimentos.length) {
+      const emp = u.searchParams.get('emp');
+      const e = c.empreendimentos.find(x => x.id === emp) || c.empreendimentos[0];
+      advId = (e && e.tiktokAdvertiserId) || advId;
+    }
+    if (!advId) return json(res, 404, { error: 'cliente sem conta TikTok (defina tiktokAdvertiserId no clients.json)' });
+    const days = parseInt(u.searchParams.get('days') || '', 10) || 0;
+    return getTiktok(cli, advId, days).then(d => json(res, 200, d)).catch(e => json(res, 502, { error: 'falha TikTok', detail: e.message }));
+  }
+
+  // ---- TikTok: trocar auth_code por access_token (apenas equipe; rodar 1x por anunciante) ----
+  // Uso: depois que o cliente autoriza o app pela "Advertiser authorization URL", o TikTok
+  // devolve um auth_code. Abra /api/tiktok-auth?code=<AUTH_CODE> logado como agência:
+  // a resposta traz o access_token (copie p/ TIKTOK_ACCESS_TOKEN) e os advertiser_ids.
+  if (p === '/api/tiktok-auth') {
+    if (!isStaff(sess)) return json(res, 403, { error: 'apenas equipe (admin/analista)' });
+    if (!TIKTOK_APP_ID || !TIKTOK_APP_SECRET) return json(res, 503, { error: 'defina TIKTOK_APP_ID e TIKTOK_APP_SECRET no servidor' });
+    const code = u.searchParams.get('code') || u.searchParams.get('auth_code') || '';
+    if (!code) return json(res, 400, { error: 'faltou ?code=<AUTH_CODE> (vem na URL de retorno após o cliente autorizar)' });
+    return exchangeAuthCode(TIKTOK_APP_ID, TIKTOK_APP_SECRET, code)
+      .then(d => json(res, 200, {
+        ok: true,
+        instrucoes: 'Copie access_token para a variável TIKTOK_ACCESS_TOKEN no Render/Railway. Use um dos advertiser_ids como tiktokAdvertiserId no clients.json.',
+        access_token: d.access_token,
+        advertiser_ids: d.advertiser_ids || [],
+        scope: d.scope || []
+      }))
+      .catch(e => json(res, 502, { error: 'falha ao trocar auth_code', detail: e.message }));
   }
 
   // ---- Expad (vendas/CRM, por cliente) ----

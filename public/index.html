@@ -193,6 +193,7 @@ body.meta-locked #viewMeta>*:not(.lock-panel){display:none}
 .tab.active[data-view="criativos"]{background:#EF8A1F;box-shadow:0 4px 14px rgba(239,138,31,.4)}
 .tab.active[data-view="expad"]{background:#1F9D56;box-shadow:0 4px 14px rgba(31,157,86,.4)}
 .tab.active[data-view="ga4"]{background:#E8710A;box-shadow:0 4px 14px rgba(232,113,10,.4)}
+.tab.active[data-view="tiktok"]{background:#111;box-shadow:0 4px 14px rgba(37,244,238,.45)}
 .e-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--row-border);font-size:13px}
 .e-row:last-child{border:none}
 .e-row .m-label{color:var(--muted)}
@@ -236,6 +237,7 @@ body.meta-locked #viewMeta>*:not(.lock-panel){display:none}
       <button class="tab" data-view="criativos">Criativos</button>
       <button class="tab" data-view="expad">Leads Expad</button>
       <button class="tab" data-view="ga4">GA4</button>
+      <button class="tab" data-view="tiktok" id="tabTiktok" hidden>TikTok Ads</button>
     </div>
     <div class="toolbar-actions">
       <a class="icon-btn" id="hubBtn" href="#" title="Voltar ao projeto" style="text-decoration:none;display:none">←</a>
@@ -472,6 +474,30 @@ body.meta-locked #viewMeta>*:not(.lock-panel){display:none}
     </div>
     <footer>Fonte: <b>Google Analytics 4</b> · <span id="g4FootInfo">&nbsp;</span></footer>
   </div><!-- /viewGA4 -->
+
+  <!-- ===================== VIEW: TIKTOK ADS ===================== -->
+  <div id="viewTiktok" hidden>
+    <div class="section-title">🎵 TikTok Ads <small id="ttInfo">&nbsp;</small></div>
+    <div class="meta-kpis" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi glass"><div class="top"><span class="label">Investimento</span><span class="ico b">💸</span></div><div class="val" id="ttSpend">—</div><div class="meta"><span>no período</span></div></div>
+      <div class="kpi glass"><div class="top"><span class="label">Impressões</span><span class="ico o">👁</span></div><div class="val" id="ttImpr">—</div><div class="meta"><span>no período</span></div></div>
+      <div class="kpi glass"><div class="top"><span class="label">Cliques</span><span class="ico g">🖱</span></div><div class="val" id="ttClicks">—</div><div class="meta"><span>CTR <b id="ttCtr">—</b></span></div></div>
+      <div class="kpi glass"><div class="top"><span class="label">Conversões</span><span class="ico g">🎯</span></div><div class="val" id="ttConv">—</div><div class="meta"><span>leads/eventos</span></div></div>
+      <div class="kpi glass"><div class="top"><span class="label">Custo por conversão</span><span class="ico o">📉</span></div><div class="val" id="ttCpl">—</div><div class="meta"><span>CPL</span></div></div>
+      <div class="kpi glass"><div class="top"><span class="label">CPC médio</span><span class="ico b">🔗</span></div><div class="val" id="ttCpc">—</div><div class="meta"><span>por clique</span></div></div>
+    </div>
+    <div class="meta-kpis" style="grid-template-columns:1fr 1fr;margin-top:14px">
+      <div class="panel glass"><h4>📈 Investimento e conversões por dia</h4><canvas id="chartTT" style="max-height:280px"></canvas></div>
+      <div class="panel glass"><h4>🍩 Distribuição por campanha</h4><canvas id="chartTTDoughnut" style="max-height:280px"></canvas><div class="legend" id="ttDoughnutLegend"></div></div>
+    </div>
+    <div class="panel glass" style="margin-top:14px"><h4>🏆 Top campanhas <small style="font-weight:400;color:var(--muted)">por investimento</small></h4>
+      <div class="table-wrap"><table id="ttTbl">
+        <thead><tr><th>Campanha</th><th style="text-align:right">Investido</th><th style="text-align:right">Impressões</th><th style="text-align:right">Cliques</th><th style="text-align:right">Conversões</th><th style="text-align:right">CPL</th></tr></thead>
+        <tbody id="ttTblBody"><tr><td colspan="6" class="crt-empty">—</td></tr></tbody>
+      </table></div>
+    </div>
+    <footer>Fonte: <b>TikTok Ads</b> · <span id="ttFootInfo">&nbsp;</span></footer>
+  </div><!-- /viewTiktok -->
 </div>
 
 <script>
@@ -831,6 +857,7 @@ document.getElementById('periods').addEventListener('click',e=>{
     const d=new Date(), mes1=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';
     if(activeView==='expad'){ expadFrom=mes1; expadTo=ymdAgo(0); loadExpad(); return; }
     if(activeView==='ga4'){ ga4From=mes1; ga4To=ymdAgo(0); loadGA4(); return; }
+    if(activeView==='tiktok'){ const dom=new Date().getDate(); loadTiktok(dom); return; }
     if(activeView==='criativos'){ const dom=new Date().getDate(); crtSource==='google'?loadGoogleCreatives(dom):loadMetaCreatives(dom); return; }
     const dash=activeDash(); if(dash){ dash.setRange(mes1, dash.max); syncDateInputs(); }
     return;
@@ -852,6 +879,12 @@ document.getElementById('applyRange').addEventListener('click',()=>{
     if(ga4From&&ga4To&&ga4From>ga4To){const t=ga4From;ga4From=ga4To;ga4To=t;}
     document.querySelectorAll('#periods .pill').forEach(p=>p.classList.remove('active'));
     loadGA4(); return;
+  }
+  if(activeView==='tiktok'){
+    document.querySelectorAll('#periods .pill').forEach(p=>p.classList.remove('active'));
+    const f=dFrom.value;
+    const dd = f ? Math.max(1,Math.round((Date.now()-new Date(f+'T00:00:00').getTime())/864e5)+1) : 0;
+    loadTiktok(dd); return;
   }
   if(activeView==='criativos'){
     document.querySelectorAll('#periods .pill').forEach(p=>p.classList.remove('active'));
@@ -1012,6 +1045,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   document.getElementById('viewCriativos').hidden = v!=='criativos';
   document.getElementById('viewExpad').hidden = v!=='expad';
   document.getElementById('viewGA4').hidden = v!=='ga4';
+  const vtt=document.getElementById('viewTiktok'); if(vtt) vtt.hidden = v!=='tiktok';
   document.body.classList.toggle('view-criativos', v==='criativos');
   activeView=v;
   if(v==='criativos'){ document.getElementById('periodLabel').textContent='Criativos';
@@ -1024,6 +1058,8 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   else if(v==='ga4'){ document.getElementById('periodLabel').textContent='Google Analytics 4';
     dFrom.removeAttribute('min'); dFrom.removeAttribute('max'); dTo.removeAttribute('min'); dTo.removeAttribute('max'); // período livre no GA4
     loadGA4(); }
+  else if(v==='tiktok'){ document.getElementById('periodLabel').textContent='TikTok Ads';
+    loadTiktok(activePillDays()); }
   else { const dash=activeDash();
     if(dash){ syncDateInputs(); dash.render(); }
     else { document.getElementById('periodLabel').textContent = metaError ? ('Meta — erro: '+metaError) : 'Meta Ads · carregando…'; } }
@@ -1072,7 +1108,7 @@ window.selEmp = '';
   bar.addEventListener('click', ev=>{
     const b=ev.target.closest('.emp-item'); if(!b) return;
     bar.querySelectorAll('.emp-item').forEach(p=>p.classList.remove('active'));
-    b.classList.add('active'); window.selEmp=b.dataset.emp; applyEmpMetas(window.selEmp); googleGerado='ao vivo'; loadGoogle(); loadMeta(); if(activeView==='ga4') loadGA4();
+    b.classList.add('active'); window.selEmp=b.dataset.emp; applyEmpMetas(window.selEmp); googleGerado='ao vivo'; loadGoogle(); loadMeta(); if(activeView==='ga4') loadGA4(); if(activeView==='tiktok') loadTiktok(activePillDays());
   });
 })();
 loadGoogle();
@@ -1117,6 +1153,69 @@ async function loadGA4(){
     info.textContent='· ao vivo · propriedade '+(j.propertyId||'');
     document.getElementById('g4FootInfo').textContent='período '+(j.periodo||'últimos 30 dias');
   }catch(e){ info.textContent='· erro: '+e.message; }
+}
+
+// ===== TikTok Ads — carrega ao clicar na aba =====
+let chTT, chTTd;
+const _TTPAL=['#25F4EE','#FE2C55','#8b5cf6','#0047FF','#EF8A1F','#1F9D56','#E8710A','#DC4632','#00b8d9','#777'];
+// Mostra a aba TikTok só p/ clientes que têm advertiser_id (window.CLIENTE.hasTiktok).
+(function(){ const tb=document.getElementById('tabTiktok'); if(tb && window.CLIENTE && window.CLIENTE.hasTiktok) tb.hidden=false; })();
+async function loadTiktok(days){
+  const info=document.getElementById('ttInfo');
+  info.textContent='· carregando…';
+  const cliQ = (window.CLIENTE&&window.CLIENTE.id)?('?cli='+encodeURIComponent(window.CLIENTE.id)):'?cli=';
+  const empQ = window.selEmp?('&emp='+encodeURIComponent(window.selEmp)):'';
+  const dayQ = days?('&days='+days):'';
+  let j={};
+  try{
+    const r=await fetch('/api/tiktok'+cliQ+empQ+dayQ,{cache:'no-store'});
+    j=await r.json();
+    if(!r.ok){
+      info.textContent='· '+(j.error||('HTTP '+r.status))+(j.detail?(' — '+String(j.detail).slice(0,140)):'');
+      ['ttSpend','ttImpr','ttClicks','ttConv','ttCpl','ttCpc','ttCtr'].forEach(id=>{const e=document.getElementById(id); if(e)e.textContent='—';});
+      document.getElementById('ttTblBody').innerHTML='<tr><td colspan="6" class="crt-empty">'+(j.error||'erro')+'</td></tr>';
+      return;
+    }
+  }catch(e){ info.textContent='· erro: '+e.message; return; }
+
+  window.TIKTOK=j;   // exposto pro gerador de relatório
+  const t=j.totais||{};
+  document.getElementById('ttSpend').textContent=BRL(t.spend);
+  document.getElementById('ttImpr').textContent=NUM(t.impr);
+  document.getElementById('ttClicks').textContent=NUM(t.clicks);
+  document.getElementById('ttConv').textContent=NUM(t.leads);
+  document.getElementById('ttCpl').textContent=BRL(t.cpl);
+  document.getElementById('ttCpc').textContent=BRL(t.cpc);
+  document.getElementById('ttCtr').textContent=(t.ctr||0).toFixed(2)+'%';
+
+  // gráfico diário (investimento em barra + conversões acumuladas em linha)
+  const dias=j.dias||[]; let acc=0; const accConv=dias.map(d=>acc+=d.conv);
+  const grid={color:'rgba(128,128,128,.15)'};
+  if(chTT) chTT.destroy();
+  chTT=new Chart(document.getElementById('chartTT'),{data:{labels:dias.map(d=>ddmm(d.data)),datasets:[
+      {type:'bar',label:'Investimento (R$)',data:dias.map(d=>d.custo),backgroundColor:'rgba(37,244,238,.55)',borderRadius:4,yAxisID:'y'},
+      {type:'line',label:'Conversões acum.',data:accConv,borderColor:'#FE2C55',backgroundColor:'rgba(254,44,85,.15)',fill:true,tension:.3,pointRadius:2,yAxisID:'y1'}
+    ]},options:{responsive:true,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{boxWidth:12,usePointStyle:true}}},
+      scales:{x:{grid:{display:false}},y:{position:'left',grid,ticks:{callback:v=>'R$'+v}},y1:{position:'right',grid:{drawOnChartArea:false}}}}});
+
+  // doughnut por campanha
+  const R=j.regioes||[];
+  if(chTTd) chTTd.destroy();
+  chTTd=new Chart(document.getElementById('chartTTDoughnut'),{type:'doughnut',
+    data:{labels:R.map(r=>r[0]),datasets:[{data:R.map(r=>r[1]),backgroundColor:R.map((r,i)=>_TTPAL[i%_TTPAL.length]),borderWidth:0,hoverOffset:8}]},
+    options:{responsive:true,cutout:'62%',plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>c.label+': '+BRL(c.raw)+' ('+(t.spend?(c.raw/t.spend*100):0).toFixed(1)+'%)'}}}}});
+  document.getElementById('ttDoughnutLegend').innerHTML=R.map((r,i)=>'<span><i style="background:'+_TTPAL[i%_TTPAL.length]+'"></i>'+r[0]+'</span>').join('');
+
+  // tabela top campanhas
+  const camps=j.campanhas||[];
+  document.getElementById('ttTblBody').innerHTML = camps.length
+    ? camps.map(c=>'<tr><td>'+c.nome+'</td><td style="text-align:right">'+BRL(c.spend)+'</td><td style="text-align:right">'+NUM(c.impr)+'</td><td style="text-align:right">'+NUM(c.clicks)+'</td><td style="text-align:right">'+NUM(c.leads)+'</td><td style="text-align:right">'+BRL(c.cpl)+'</td></tr>').join('')
+    : '<tr><td colspan="6" class="crt-empty">Sem campanhas com investimento no período.</td></tr>';
+
+  info.textContent='· ao vivo · anunciante '+(j.contaId||'');
+  document.getElementById('ttFootInfo').textContent='período '+(j.periodo||'');
 }
 
 function renderExpad(j){

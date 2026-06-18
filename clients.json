@@ -490,6 +490,7 @@
     "logo": "/assets/logo.svg",
     "googleCustomerId": "5726968972",
     "metaAccount": "act_725882184549241",
+    "tiktokAdvertiserId": "COLOQUE_AQUI_O_ADVERTISER_ID",
     "metas": { "google": { "orcamentoMensal": 0, "metaLeadsMensal": 0 }, "meta": { "orcamento": 0, "metaLeads": 0 } },
     "expadAccountId": "68f464c11b8c8f66ff8c5178", "expadApiKey": "3e6c4f996ec8594cf2180c2724b695c7c94d71e61c7003cd8d66a6b9836fa605",
     "ga4Property": "401342115",
