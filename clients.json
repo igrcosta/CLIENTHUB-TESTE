@@ -502,7 +502,7 @@
     "logo": "/assets/logo.svg",
     "googleCustomerId": "9825351637",
     "metaAccount": "act_528466867885179",
-    "tiktokAdvertiserId": "7156675428080467970",
+    "tiktokAdvertiserId": "7156675428080467970" ,
     "metas": { "google": { "orcamentoMensal": 0, "metaLeadsMensal": 0 }, "meta": { "orcamento": 0, "metaLeads": 0 } },
     "expadAccountId": "68f464c21b8c8f66ff8c55b9", "expadApiKey": "e57319c6fc4b7c6ca1e5e8fcf1efeccc667662383c3cb27765f5903d7604b967",
     "ga4Property": "319804300",
