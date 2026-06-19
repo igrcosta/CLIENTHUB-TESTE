@@ -894,9 +894,11 @@ document.getElementById('applyRange').addEventListener('click',()=>{
   }
   if(activeView==='tiktok'){
     document.querySelectorAll('#periods .pill').forEach(p=>p.classList.remove('active'));
-    const f=dFrom.value;
-    const dd = f ? Math.max(1,Math.round((Date.now()-new Date(f+'T00:00:00').getTime())/864e5)+1) : 0;
-    loadTiktok(dd); return;
+    const f=dFrom.value, t=dTo.value;
+    if(f&&t) loadTiktok({from:f,to:t});                 // período exato (qualquer data, qualquer duração)
+    else if(f) loadTiktok({from:f,to:new Date().toISOString().slice(0,10)});
+    else loadTiktok(0);
+    return;
   }
   if(activeView==='criativos'){
     document.querySelectorAll('#periods .pill').forEach(p=>p.classList.remove('active'));
@@ -1071,6 +1073,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
     dFrom.removeAttribute('min'); dFrom.removeAttribute('max'); dTo.removeAttribute('min'); dTo.removeAttribute('max'); // período livre no GA4
     loadGA4(); }
   else if(v==='tiktok'){ document.getElementById('periodLabel').textContent='TikTok Ads';
+    dFrom.removeAttribute('min'); dFrom.removeAttribute('max'); dTo.removeAttribute('min'); dTo.removeAttribute('max'); // período livre no TikTok
     loadTiktok(activePillDays()); }
   else { const dash=activeDash();
     if(dash){ syncDateInputs(); dash.render(); }
@@ -1173,13 +1176,16 @@ const _TTPAL=['#25F4EE','#FE2C55','#8b5cf6','#0047FF','#EF8A1F','#1F9D56','#E871
 // Mostra a aba TikTok só p/ clientes que têm advertiser_id (window.CLIENTE.hasTiktok).
 (function(){ const tb=document.getElementById('tabTiktok'); if(tb && window.CLIENTE && window.CLIENTE.hasTiktok) tb.hidden=false; })();
 function ttSetLoading(on){ const o=document.getElementById('loadOverlay'); if(o) o.hidden=!on; }
-async function loadTiktok(days){
+// arg: número de dias (janela terminando hoje) OU {from,to} em YYYY-MM-DD (período exato).
+async function loadTiktok(arg){
   const info=document.getElementById('ttInfo');
   info.textContent='· carregando…';
   ttSetLoading(true);
   const cliQ = (window.CLIENTE&&window.CLIENTE.id)?('?cli='+encodeURIComponent(window.CLIENTE.id)):'?cli=';
   const empQ = window.selEmp?('&emp='+encodeURIComponent(window.selEmp)):'';
-  const dayQ = days?('&days='+days):'';
+  const dayQ = (arg && typeof arg==='object')
+    ? (arg.from&&arg.to ? '&from='+arg.from+'&to='+arg.to : '')
+    : (arg ? '&days='+arg : '');
   let j={};
   try{
     const r=await fetch('/api/tiktok'+cliQ+empQ+dayQ,{cache:'no-store'});

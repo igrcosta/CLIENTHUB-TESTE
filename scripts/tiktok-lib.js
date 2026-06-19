@@ -70,6 +70,26 @@ const METRICS_DIA = ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'conversion
 const METRICS_CAMP = ['campaign_name', 'spend', 'impressions', 'clicks', 'conversion'];
 const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 const r2 = n => +(+n).toFixed(2);
+const _p2 = x => String(x).padStart(2, '0');
+const ymd = d => d.getUTCFullYear() + '-' + _p2(d.getUTCMonth() + 1) + '-' + _p2(d.getUTCDate());
+
+// A API do TikTok limita o breakdown diário (stat_time_day) a ~30 dias por chamada.
+// Quebra [start, end] em blocos de no máximo `maxDays` dias (sem sobreposição) p/ cobrir
+// períodos longos (ex.: o ano todo) com várias chamadas que depois são concatenadas.
+function splitRange(start, end, maxDays) {
+  const MS = 864e5;
+  const s0 = Date.parse(start + 'T00:00:00Z');
+  const e0 = Date.parse(end + 'T00:00:00Z');
+  if (isNaN(s0) || isNaN(e0) || s0 > e0) return [{ since: start, until: end }];
+  const out = [];
+  let s = s0;
+  while (s <= e0) {
+    const u = Math.min(s + (maxDays - 1) * MS, e0);
+    out.push({ since: ymd(new Date(s)), until: ymd(new Date(u)) });
+    s = u + MS;
+  }
+  return out;
+}
 
 async function report(token, advertiserId, dataLevel, dimensions, metrics, start, end) {
   let out = [], page = 1, totalPage = 1;
@@ -102,7 +122,13 @@ async function fetchTiktokData(token, advertiserId, range) {
   const periodoLbl = start + ' a ' + end;
 
   // 1) Série diária (nível anunciante) -> alimenta KPIs + gráfico
-  const diasRaw = await report(token, advertiserId, 'AUCTION_ADVERTISER', ['stat_time_day'], METRICS_DIA, start, end);
+  //    stat_time_day aceita no máx. ~30 dias por chamada, então buscamos em blocos e juntamos.
+  const chunks = splitRange(start, end, 30);
+  let diasRaw = [];
+  for (const ch of chunks) {
+    const part = await report(token, advertiserId, 'AUCTION_ADVERTISER', ['stat_time_day'], METRICS_DIA, ch.since, ch.until);
+    diasRaw = diasRaw.concat(part);
+  }
   const dias = diasRaw.map(r => {
     const m = r.metrics || {}, dim = r.dimensions || {};
     return {
