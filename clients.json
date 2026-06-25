@@ -280,6 +280,7 @@
   "puc-tom": {
     "nome": "PUC/Tom",
     "sub": "PUC Minas · BRL",
+    "template": "puc-tom",
     "logo": "/assets/logo.svg",
     "googleCustomerId": "8586927389",
     "metaAccount": "act_1405823256403026",

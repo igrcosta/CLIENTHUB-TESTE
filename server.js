@@ -80,6 +80,21 @@ function rangeFromDays(days) { // janela de N dias terminando hoje (p/ Meta)
   const d = new Date(); d.setUTCDate(d.getUTCDate() - (days - 1));
   return { since: _ymd(d), until };
 }
+// Resolve o período a partir de from/to (YYYY-MM-DD) explícitos ou de uma janela de N dias.
+// Limita o intervalo a `maxSpan` dias (protege o servidor de pedidos absurdos).
+function resolveRange(fromQ, toQ, days, maxSpan = 400) {
+  const isYmd = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+  if (isYmd(fromQ) && isYmd(toQ)) {
+    let since = fromQ, until = toQ;
+    if (since > until) { const t = since; since = until; until = t; }
+    const MS = 864e5;
+    const span = Math.floor((Date.parse(until + 'T00:00:00Z') - Date.parse(since + 'T00:00:00Z')) / MS) + 1;
+    if (span > maxSpan) since = _ymd(new Date(Date.parse(until + 'T00:00:00Z') - (maxSpan - 1) * MS));
+    return { since, until };
+  }
+  const d = days ? Math.max(1, Math.min(maxSpan, days)) : historyDays();
+  return rangeFromDays(d);
+}
 
 // ---------- cookie assinado ----------
 function sign(payload) {
@@ -153,10 +168,8 @@ function getGoogle(cli, cid, days) {
 
 // ---------- TikTok Ads (cache por cliente) ----------
 const tiktokCache = {}; // chave -> {data, ts, inflight}
-function getTiktok(cli, advId, days) {
-  const d = days ? Math.max(1, Math.min(400, days)) : historyDays();
-  const range = rangeFromDays(d);
-  const key = cli + '|' + (advId || '') + '|' + d;
+function getTiktok(cli, advId, range) {
+  const key = cli + '|' + (advId || '') + '|' + range.since + '|' + range.until;
   const slot = tiktokCache[key] || (tiktokCache[key] = { data: null, ts: 0, inflight: null });
   const now = Date.now();
   if (slot.data && (now - slot.ts) < TIKTOK_TTL_MS) return Promise.resolve(slot.data);
@@ -575,7 +588,8 @@ const server = http.createServer((req, res) => {
     }
     if (!advId) return json(res, 404, { error: 'cliente sem conta TikTok (defina tiktokAdvertiserId no clients.json)' });
     const days = parseInt(u.searchParams.get('days') || '', 10) || 0;
-    return getTiktok(cli, advId, days).then(d => json(res, 200, d)).catch(e => json(res, 502, { error: 'falha TikTok', detail: e.message }));
+    const range = resolveRange(u.searchParams.get('from'), u.searchParams.get('to'), days);
+    return getTiktok(cli, advId, range).then(d => json(res, 200, d)).catch(e => json(res, 502, { error: 'falha TikTok', detail: e.message }));
   }
 
   // ---- TikTok: trocar auth_code por access_token (apenas equipe; rodar 1x por anunciante) ----
